@@ -171,6 +171,7 @@ export const NAVIGATION_LINKS = {
   AUTHENTICATED: [
     { name: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' },
     { name: 'Convert', href: '/convert', icon: 'FileText' },
+    { name: 'Advanced', href: '/advanced', icon: 'Zap' },
     { name: 'History', href: '/history', icon: 'Clock' },
     { name: 'Analytics', href: '/analytics', icon: 'BarChart3' },
     { name: 'Settings', href: '/settings', icon: 'Settings' },

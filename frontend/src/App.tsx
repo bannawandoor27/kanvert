@@ -11,6 +11,9 @@ import DashboardPage from './pages/DashboardPage';
 import ConversionPage from './pages/ConversionPage';
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
+import DocumentationPage from './pages/DocumentationPage';
+import AdvancedPage from './pages/AdvancedPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -51,6 +54,10 @@ function App() {
             <Route path="/convert/:format" element={<ConversionPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/docs" element={<DocumentationPage />} />
+            <Route path="/documentation" element={<DocumentationPage />} />
+            <Route path="/advanced" element={<AdvancedPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             {/* Add more routes as we create the pages */}
             <Route path="*" element={
               <div className="min-h-screen flex items-center justify-center">
