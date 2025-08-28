@@ -6,7 +6,7 @@ A professional, modular MCP (Model Context Protocol) server built with FastAPI f
 
 - 🚀 **Professional Architecture**: Modular, extensible design following SOLID principles
 - 📄 **Markdown to PDF**: High-quality PDF generation from markdown with custom styling
-- 🔌 **MCP Protocol**: Full Model Context Protocol support for AI integration
+- 🔌 **MCP Protocol**: Full Model Context Protocol support using official FastMCP framework
 - 🛡️ **Robust Error Handling**: Comprehensive error handling and logging
 - 🐳 **Docker Ready**: Production-ready Docker deployment
 - 📊 **Monitoring**: Built-in health checks and metrics
@@ -24,10 +24,20 @@ docker-compose up --build
 # The server will be available at http://localhost:8000
 ```
 
-### Local Development
+### Local Development with uv
 
 ```bash
-# Install dependencies
+# Install dependencies using uv
+uv sync
+
+# Run the server
+uv run uvicorn kanvert.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Alternative: Traditional pip
+
+```bash
+# Install dependencies (legacy method)
 pip install -r requirements.txt
 
 # Run the server

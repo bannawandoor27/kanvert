@@ -15,8 +15,21 @@ from .api.routes import router as conversion_router
 from .api.middleware import setup_middleware
 from .mcp.routes import router as mcp_router
 from .core.registry import converter_registry
-from .services.markdown_pdf import MarkdownToPdfConverter
 from .utils.logging_config import setup_logging
+
+# Try to import WeasyPrint-dependent services
+try:
+    from .services.markdown_pdf import MarkdownToPdfConverter
+    WEASYPRINT_AVAILABLE = True
+except ImportError as e:
+    WEASYPRINT_AVAILABLE = False
+    import warnings
+    warnings.warn(
+        f"WeasyPrint dependencies not available: {e}. "
+        "PDF conversion will be disabled. Install system dependencies: "
+        "brew install cairo pango gdk-pixbuf libffi",
+        ImportWarning
+    )
 
 
 @asynccontextmanager
@@ -32,9 +45,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Kanvert application", version=settings.app_version)
     
     try:
-        # Register converters
-        markdown_converter = MarkdownToPdfConverter()
-        converter_registry.register_converter(markdown_converter)
+        # Register converters if available
+        if WEASYPRINT_AVAILABLE:
+            markdown_converter = MarkdownToPdfConverter()
+            converter_registry.register_converter(markdown_converter)
+            logger.info("Markdown to PDF converter registered")
+        else:
+            logger.warning("PDF conversion disabled - WeasyPrint dependencies missing")
         
         # Create temp directory if needed
         import os

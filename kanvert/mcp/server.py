@@ -1,203 +1,87 @@
 """
-MCP (Model Context Protocol) integration for AI tool support.
+MCP (Model Context Protocol) server using the official FastMCP framework.
 """
 
-from typing import Dict, Any, List, Optional
-from pydantic import BaseModel
-import json
 import logging
+from typing import Dict, Any, Optional
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
-from ..core.base import ConversionRequest, ConversionFormat
+from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.session import ServerSession
+
+from ..core.base import ConversionRequest, ConversionFormat, ConversionStatus
 from ..core.registry import converter_registry
 from ..config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-class MCPTool(BaseModel):
-    """MCP tool definition."""
-    name: str
-    description: str
-    input_schema: Dict[str, Any]
+@dataclass
+class AppContext:
+    """Application context for MCP server."""
+    settings: Any
+    registry: Any
 
 
-class MCPRequest(BaseModel):
-    """MCP request model."""
-    method: str
-    params: Dict[str, Any]
+@asynccontextmanager
+async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Manage application lifecycle for MCP server."""
+    settings = get_settings()
+    logger.info("Starting MCP server", server_name=settings.mcp_server_name)
+    
+    try:
+        yield AppContext(
+            settings=settings,
+            registry=converter_registry
+        )
+    finally:
+        logger.info("Shutting down MCP server")
 
 
-class MCPResponse(BaseModel):
-    """MCP response model."""
-    result: Optional[Any] = None
-    error: Optional[str] = None
+# Create the FastMCP server instance
+mcp_server = FastMCP(
+    name="kanvert",
+    lifespan=app_lifespan
+)
 
 
-class MCPServer:
+@mcp_server.tool()
+async def convert_markdown_to_pdf(
+    content: str,
+    title: Optional[str] = None,
+    include_toc: bool = False,
+    custom_css: Optional[str] = None,
+    ctx: Context[ServerSession, AppContext] = None
+) -> Dict[str, Any]:
     """
-    MCP (Model Context Protocol) server for document conversion tools.
+    Convert markdown content to a professionally formatted PDF document.
     
-    Provides AI models with document conversion capabilities through
-    standardized tool interfaces.
+    Args:
+        content: Markdown content to convert to PDF
+        title: Document title for the PDF header
+        include_toc: Include table of contents in the PDF
+        custom_css: Additional CSS styling for the PDF
+        ctx: MCP context (automatically injected)
+        
+    Returns:
+        Conversion result with success status and metadata
     """
-    
-    def __init__(self):
-        self.settings = get_settings()
-        self.tools = self._register_tools()
-    
-    def _register_tools(self) -> Dict[str, MCPTool]:
-        """Register available MCP tools."""
-        tools = {}
+    try:
+        if not content or not content.strip():
+            raise ValueError("Content is required and cannot be empty")
         
-        # Markdown to PDF tool
-        tools["convert_markdown_to_pdf"] = MCPTool(
-            name="convert_markdown_to_pdf",
-            description="Convert markdown content to a professionally formatted PDF document",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "Markdown content to convert to PDF"
-                    },
-                    "title": {
-                        "type": "string",
-                        "description": "Document title for the PDF header"
-                    },
-                    "include_toc": {
-                        "type": "boolean",
-                        "description": "Include table of contents in the PDF",
-                        "default": False
-                    },
-                    "custom_css": {
-                        "type": "string",
-                        "description": "Additional CSS styling for the PDF"
-                    }
-                },
-                "required": ["content"]
-            }
-        )
+        await ctx.info(f"Starting markdown to PDF conversion")
         
-        # Generic conversion tool
-        tools["convert_document"] = MCPTool(
-            name="convert_document",
-            description="Convert document content between different formats",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "Content to convert"
-                    },
-                    "output_format": {
-                        "type": "string",
-                        "enum": ["pdf", "html", "docx"],
-                        "description": "Target output format"
-                    },
-                    "options": {
-                        "type": "object",
-                        "description": "Format-specific conversion options"
-                    }
-                },
-                "required": ["content", "output_format"]
-            }
-        )
-        
-        # List formats tool
-        tools["list_supported_formats"] = MCPTool(
-            name="list_supported_formats",
-            description="Get list of supported document conversion formats and converters",
-            input_schema={
-                "type": "object",
-                "properties": {},
-                "additionalProperties": False
-            }
-        )
-        
-        return tools
-    
-    def get_capabilities(self) -> Dict[str, Any]:
-        """Get MCP server capabilities."""
-        return {
-            "server": {
-                "name": self.settings.mcp_server_name,
-                "version": self.settings.mcp_version
-            },
-            "tools": [tool.dict() for tool in self.tools.values()],
-            "protocol_version": "1.0.0"
-        }
-    
-    async def handle_request(self, request: MCPRequest) -> MCPResponse:
-        """
-        Handle MCP tool requests.
-        
-        Args:
-            request: MCP request containing method and parameters
-            
-        Returns:
-            MCP response with result or error
-        """
-        try:
-            if request.method == "tools/list":
-                return MCPResponse(result={"tools": [tool.dict() for tool in self.tools.values()]})
-            
-            elif request.method == "tools/call":
-                tool_name = request.params.get("name")
-                arguments = request.params.get("arguments", {})
-                
-                if tool_name not in self.tools:
-                    return MCPResponse(error=f"Unknown tool: {tool_name}")
-                
-                result = await self._execute_tool(tool_name, arguments)
-                return MCPResponse(result=result)
-            
-            elif request.method == "server/capabilities":
-                return MCPResponse(result=self.get_capabilities())
-            
-            else:
-                return MCPResponse(error=f"Unknown method: {request.method}")
-                
-        except Exception as e:
-            logger.error(f"MCP request error: {str(e)}")
-            return MCPResponse(error=str(e))
-    
-    async def _execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute a specific MCP tool.
-        
-        Args:
-            tool_name: Name of the tool to execute
-            arguments: Tool arguments
-            
-        Returns:
-            Tool execution result
-        """
-        if tool_name == "convert_markdown_to_pdf":
-            return await self._convert_markdown_to_pdf(arguments)
-        
-        elif tool_name == "convert_document":
-            return await self._convert_document(arguments)
-        
-        elif tool_name == "list_supported_formats":
-            return await self._list_supported_formats()
-        
-        else:
-            raise ValueError(f"Unknown tool: {tool_name}")
-    
-    async def _convert_markdown_to_pdf(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute markdown to PDF conversion."""
-        content = arguments.get("content")
-        if not content:
-            raise ValueError("Content is required")
-        
-        # Build options
+        # Build conversion options
         options = {}
-        if "title" in arguments:
-            options["title"] = arguments["title"]
-        if "include_toc" in arguments:
-            options["include_toc"] = arguments["include_toc"]
-        if "custom_css" in arguments:
-            options["custom_css"] = arguments["custom_css"]
+        if title:
+            options["title"] = title
+        if include_toc:
+            options["include_toc"] = include_toc
+        if custom_css:
+            options["custom_css"] = custom_css
         
         # Create conversion request
         request = ConversionRequest(
@@ -206,12 +90,12 @@ class MCPServer:
             options=options
         )
         
-        # Perform conversion
-        result = await converter_registry.convert(request, "markdown_to_pdf")
+        # Perform conversion using the registry
+        registry = ctx.request_context.lifespan_context.registry
+        result = await registry.convert(request, "markdown_to_pdf")
         
-        if result.status.value == "completed":
-            # For MCP, we'll return metadata and indicate success
-            # The actual PDF data would be handled separately
+        if result.status == ConversionStatus.COMPLETED:
+            await ctx.info(f"Conversion completed successfully: {result.job_id}")
             return {
                 "success": True,
                 "job_id": result.job_id,
@@ -221,33 +105,66 @@ class MCPServer:
                 "message": "PDF generated successfully"
             }
         else:
+            await ctx.error(f"Conversion failed: {result.error_message}")
             return {
                 "success": False,
                 "error": result.error_message,
                 "job_id": result.job_id
             }
     
-    async def _convert_document(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute generic document conversion."""
-        content = arguments.get("content")
-        output_format = arguments.get("output_format")
+    except Exception as e:
+        error_msg = f"Failed to convert markdown to PDF: {str(e)}"
+        await ctx.error(error_msg)
+        return {
+            "success": False,
+            "error": error_msg
+        }
+
+
+@mcp_server.tool()
+async def convert_document(
+    content: str,
+    output_format: str,
+    options: Optional[Dict[str, Any]] = None,
+    ctx: Context[ServerSession, AppContext] = None
+) -> Dict[str, Any]:
+    """
+    Convert document content between different formats.
+    
+    Args:
+        content: Content to convert
+        output_format: Target output format (pdf, html, docx)
+        options: Format-specific conversion options
+        ctx: MCP context (automatically injected)
         
-        if not content:
-            raise ValueError("Content is required")
-        if not output_format:
-            raise ValueError("Output format is required")
+    Returns:
+        Conversion result with success status and metadata
+    """
+    try:
+        if not content or not content.strip():
+            raise ValueError("Content is required and cannot be empty")
+        
+        # Validate output format
+        try:
+            format_enum = ConversionFormat(output_format.lower())
+        except ValueError:
+            raise ValueError(f"Unsupported output format: {output_format}")
+        
+        await ctx.info(f"Starting conversion to {output_format}")
         
         # Create conversion request
         request = ConversionRequest(
             content=content,
-            output_format=ConversionFormat(output_format),
-            options=arguments.get("options", {})
+            output_format=format_enum,
+            options=options or {}
         )
         
-        # Perform conversion
-        result = await converter_registry.convert(request)
+        # Perform conversion using the registry
+        registry = ctx.request_context.lifespan_context.registry
+        result = await registry.convert(request)
         
-        if result.status.value == "completed":
+        if result.status == ConversionStatus.COMPLETED:
+            await ctx.info(f"Conversion to {output_format} completed: {result.job_id}")
             return {
                 "success": True,
                 "job_id": result.job_id,
@@ -257,20 +174,167 @@ class MCPServer:
                 "message": f"Conversion to {output_format} completed successfully"
             }
         else:
+            await ctx.error(f"Conversion to {output_format} failed: {result.error_message}")
             return {
                 "success": False,
                 "error": result.error_message,
                 "job_id": result.job_id
             }
     
-    async def _list_supported_formats(self) -> Dict[str, Any]:
-        """List supported conversion formats."""
+    except Exception as e:
+        error_msg = f"Failed to convert document: {str(e)}"
+        await ctx.error(error_msg)
         return {
-            "supported_formats": converter_registry.get_supported_formats(),
-            "converters": converter_registry.list_converters(),
-            "total_converters": len(converter_registry._converters)
+            "success": False,
+            "error": error_msg
         }
 
 
-# Global MCP server instance
-mcp_server = MCPServer()
+@mcp_server.tool()
+async def list_supported_formats(
+    ctx: Context[ServerSession, AppContext] = None
+) -> Dict[str, Any]:
+    """
+    Get list of supported document conversion formats and converters.
+    
+    Args:
+        ctx: MCP context (automatically injected)
+        
+    Returns:
+        Dictionary with supported formats and converter information
+    """
+    try:
+        await ctx.info("Retrieving supported formats")
+        
+        registry = ctx.request_context.lifespan_context.registry
+        
+        return {
+            "supported_formats": registry.get_supported_formats(),
+            "converters": registry.list_converters(),
+            "total_converters": len(registry._converters)
+        }
+    
+    except Exception as e:
+        error_msg = f"Failed to retrieve supported formats: {str(e)}"
+        await ctx.error(error_msg)
+        return {
+            "error": error_msg
+        }
+
+
+@mcp_server.tool()
+async def health_check(
+    ctx: Context[ServerSession, AppContext] = None
+) -> Dict[str, Any]:
+    """
+    Perform health check on the conversion services.
+    
+    Args:
+        ctx: MCP context (automatically injected)
+        
+    Returns:
+        Health status information
+    """
+    try:
+        await ctx.debug("Performing health check")
+        
+        registry = ctx.request_context.lifespan_context.registry
+        settings = ctx.request_context.lifespan_context.settings
+        
+        health_status = registry.health_check()
+        health_status.update({
+            "mcp_server": {
+                "name": settings.mcp_server_name,
+                "version": settings.mcp_version,
+                "enabled": settings.mcp_enabled
+            },
+            "timestamp": health_status.get("timestamp")
+        })
+        
+        await ctx.info(f"Health check completed: {health_status['status']}")
+        return health_status
+    
+    except Exception as e:
+        error_msg = f"Health check failed: {str(e)}"
+        await ctx.error(error_msg)
+        return {
+            "status": "error",
+            "error": error_msg
+        }
+
+
+# Resource for getting server information
+@mcp_server.resource("server://info")
+async def get_server_info() -> str:
+    """
+    Get server information and capabilities.
+    
+    Returns:
+        JSON string with server information
+    """
+    settings = get_settings()
+    info = {
+        "name": "Kanvert MCP Server",
+        "description": "Professional document conversion server with MCP support",
+        "version": settings.app_version,
+        "mcp_version": settings.mcp_version,
+        "capabilities": {
+            "document_conversion": True,
+            "markdown_to_pdf": True,
+            "custom_styling": True,
+            "table_of_contents": True,
+            "math_equations": True,
+            "code_highlighting": True
+        },
+        "supported_formats": converter_registry.get_supported_formats()
+    }
+    
+    import json
+    return json.dumps(info, indent=2)
+
+
+# Prompt for document conversion assistance
+@mcp_server.prompt()
+async def conversion_assistant(
+    task: str,
+    format: str = "pdf",
+    style: str = "professional"
+) -> str:
+    """
+    Generate a prompt for document conversion assistance.
+    
+    Args:
+        task: The conversion task to assist with
+        format: Target format for the conversion
+        style: Style preference for the output
+        
+    Returns:
+        Formatted prompt for the AI assistant
+    """
+    styles = {
+        "professional": "clean, business-appropriate formatting with proper typography",
+        "academic": "scholarly formatting with citations and formal structure",
+        "creative": "visually appealing with custom styling and graphics",
+        "technical": "code-focused with syntax highlighting and technical diagrams"
+    }
+    
+    style_desc = styles.get(style, styles["professional"])
+    
+    return f"""Please help with the following document conversion task:
+
+Task: {task}
+Target Format: {format.upper()}
+Style: {style_desc}
+
+Provide guidance on:
+1. Content structure and organization
+2. Formatting recommendations
+3. Any special considerations for {format} output
+4. Tips for optimal conversion quality
+
+If you need to convert content, use the convert_markdown_to_pdf or convert_document tools available through this MCP server."""
+
+
+def get_mcp_server() -> FastMCP:
+    """Get the configured MCP server instance."""
+    return mcp_server

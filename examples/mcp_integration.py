@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-MCP (Model Context Protocol) Integration Example
+MCP (Model Context Protocol) Integration Example using FastMCP
 
-This script demonstrates how to use Kanvert's MCP protocol support
+This script demonstrates how to use Kanvert's official MCP SDK integration
 for AI-powered document generation and conversion.
 """
 
@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 class KanvertMCPClient:
-    """MCP client for Kanvert integration."""
+    """MCP client for Kanvert integration using the official FastMCP framework."""
     
     def __init__(self, base_url="http://localhost:8000", api_key=None):
         self.base_url = base_url.rstrip('/')
@@ -34,14 +34,19 @@ class KanvertMCPClient:
     
     def list_mcp_tools(self):
         """List available MCP tools."""
-        return self.mcp_call("tools/list", {})
+        try:
+            response = self.session.get(f"{self.base_url}/api/v1/mcp/tools")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
     
-    def mcp_call(self, method, params):
-        """Make an MCP protocol call."""
+    def call_mcp_tool(self, tool_name, arguments):
+        """Call an MCP tool using the FastMCP framework."""
         try:
             payload = {
-                "method": method,
-                "params": params
+                "name": tool_name,
+                "arguments": arguments
             }
             response = self.session.post(f"{self.base_url}/api/v1/mcp/call", json=payload)
             response.raise_for_status()
@@ -50,26 +55,41 @@ class KanvertMCPClient:
             return {"error": str(e)}
     
     def convert_markdown_via_mcp(self, content, **options):
-        """Convert markdown to PDF using MCP protocol."""
-        return self.mcp_call("tools/call", {
-            "name": "convert_markdown_to_pdf",
-            "arguments": {
-                "content": content,
-                **options
-            }
+        """Convert markdown to PDF using FastMCP protocol."""
+        return self.call_mcp_tool("convert_markdown_to_pdf", {
+            "content": content,
+            **options
+        })
+    
+    def convert_document_via_mcp(self, content, output_format, options=None):
+        """Convert document using FastMCP protocol."""
+        return self.call_mcp_tool("convert_document", {
+            "content": content,
+            "output_format": output_format,
+            "options": options or {}
         })
     
     def list_formats_via_mcp(self):
-        """List supported formats using MCP protocol."""
-        return self.mcp_call("tools/call", {
-            "name": "list_supported_formats",
-            "arguments": {}
-        })
+        """List supported formats using FastMCP protocol."""
+        return self.call_mcp_tool("list_supported_formats", {})
+    
+    def health_check_via_mcp(self):
+        """Perform health check using FastMCP protocol."""
+        return self.call_mcp_tool("health_check", {})
+    
+    def get_resource(self, resource_uri):
+        """Get an MCP resource."""
+        try:
+            response = self.session.get(f"{self.base_url}/api/v1/mcp/resources/{resource_uri}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
 
 
 def demonstrate_mcp_basics():
-    """Demonstrate basic MCP functionality."""
-    print("🔧 MCP Protocol Demonstration")
+    """Demonstrate basic MCP functionality with FastMCP."""
+    print("🔧 FastMCP Protocol Demonstration")
     print("=" * 50)
     
     client = KanvertMCPClient()
@@ -81,8 +101,12 @@ def demonstrate_mcp_basics():
         print(f"❌ Error getting capabilities: {capabilities['error']}")
         return
     
-    print(f"   Server: {capabilities['server']['name']} v{capabilities['server']['version']}")
-    print(f"   Tools available: {len(capabilities['tools'])}")
+    server_info = capabilities.get("server", {})
+    print(f"   Server: {server_info.get('name', 'Unknown')} v{server_info.get('version', 'Unknown')}")
+    print(f"   Protocol: {capabilities.get('protocol_version', 'Unknown')}")
+    print(f"   Tools available: {len(capabilities.get('tools', []))}")
+    print(f"   Resources available: {len(capabilities.get('resources', []))}")
+    print(f"   Prompts available: {len(capabilities.get('prompts', []))}")
     
     # List tools
     print("\n🛠️  Available MCP Tools:")
@@ -91,9 +115,9 @@ def demonstrate_mcp_basics():
         print(f"❌ Error listing tools: {tools_response['error']}")
         return
     
-    tools = tools_response.get("result", {}).get("tools", [])
+    tools = tools_response.get("tools", [])
     for tool in tools:
-        print(f"   • {tool['name']}: {tool['description']}")
+        print(f"   • {tool['name']}: {tool.get('description', 'No description')}")
     
     return client
 
@@ -220,7 +244,7 @@ The integration of AI technologies in document processing represents a paradigm 
 **Review Date:** {(datetime.now()).strftime('%Y-%m-%d')}
 """
     
-    print("📄 Converting AI-generated content via MCP...")
+    print("📄 Converting AI-generated content via FastMCP...")
     
     result = client.convert_markdown_via_mcp(
         content=ai_generated_content,
@@ -229,18 +253,21 @@ The integration of AI technologies in document processing represents a paradigm 
     )
     
     if result.get("error"):
-        print(f"❌ MCP conversion failed: {result['error']}")
+        print(f"❌ FastMCP conversion failed: {result['error']}")
         return
     
-    mcp_result = result.get("result", {})
-    if mcp_result.get("success"):
-        print("✅ AI document conversion successful!")
-        print(f"   Job ID: {mcp_result['job_id']}")
-        print(f"   Filename: {mcp_result['filename']}")
-        print(f"   Size: {mcp_result['size_bytes']:,} bytes")
-        print(f"   Message: {mcp_result['message']}")
+    if result.get("success"):
+        mcp_result = result.get("result", {})
+        if mcp_result.get("success"):
+            print("✅ AI document conversion successful!")
+            print(f"   Job ID: {mcp_result['job_id']}")
+            print(f"   Filename: {mcp_result['filename']}")
+            print(f"   Size: {mcp_result['size_bytes']:,} bytes")
+            print(f"   Message: {mcp_result['message']}")
+        else:
+            print(f"❌ AI conversion failed: {mcp_result.get('error', 'Unknown error')}")
     else:
-        print(f"❌ AI conversion failed: {mcp_result.get('error', 'Unknown error')}")
+        print(f"❌ FastMCP call failed: {result.get('error', 'Unknown error')}")
 
 
 def automated_report_generation(client):
@@ -315,7 +342,7 @@ Based on data analysis:
 *This report was automatically generated using AI and MCP protocols.*
 """
     
-    print("🔄 Generating automated report via MCP...")
+    print("🔄 Generating automated report via FastMCP...")
     
     result = client.convert_markdown_via_mcp(
         content=report_content,
@@ -327,18 +354,21 @@ Based on data analysis:
         print(f"❌ Automated report generation failed: {result['error']}")
         return
     
-    mcp_result = result.get("result", {})
-    if mcp_result.get("success"):
-        print("✅ Automated report generation successful!")
-        print(f"   Job ID: {mcp_result['job_id']}")
-        print(f"   Report saved: {mcp_result['filename']}")
+    if result.get("success"):
+        mcp_result = result.get("result", {})
+        if mcp_result.get("success"):
+            print("✅ Automated report generation successful!")
+            print(f"   Job ID: {mcp_result['job_id']}")
+            print(f"   Report saved: {mcp_result['filename']}")
+        else:
+            print(f"❌ Report generation failed: {mcp_result.get('error', 'Unknown error')}")
     else:
-        print(f"❌ Report generation failed: {mcp_result.get('error', 'Unknown error')}")
+        print(f"❌ FastMCP call failed: {result.get('error', 'Unknown error')}")
 
 
 def mcp_format_discovery(client):
-    """Demonstrate format discovery via MCP."""
-    print("\n🔍 Format Discovery via MCP")
+    """Demonstrate format discovery via FastMCP."""
+    print("\n🔍 Format Discovery via FastMCP")
     print("-" * 50)
     
     result = client.list_formats_via_mcp()
@@ -347,19 +377,22 @@ def mcp_format_discovery(client):
         print(f"❌ Format discovery failed: {result['error']}")
         return
     
-    mcp_result = result.get("result", {})
-    
-    print("📋 Available Conversion Formats:")
-    for fmt in mcp_result.get("supported_formats", []):
-        print(f"   • {fmt}")
-    
-    print(f"\n🔧 Total Converters: {mcp_result.get('total_converters', 0)}")
-    
-    print("\n📖 Converter Details:")
-    for converter in mcp_result.get("converters", []):
-        print(f"   • {converter['name']}")
-        print(f"     Formats: {', '.join(converter.get('supported_formats', []))}")
-        print(f"     Description: {converter.get('description', 'N/A')}")
+    if result.get("success"):
+        mcp_result = result.get("result", {})
+        
+        print("📋 Available Conversion Formats:")
+        for fmt in mcp_result.get("supported_formats", []):
+            print(f"   • {fmt}")
+        
+        print(f"\n🔧 Total Converters: {mcp_result.get('total_converters', 0)}")
+        
+        print("\n📖 Converter Details:")
+        for converter in mcp_result.get("converters", []):
+            print(f"   • {converter['name']}")
+            print(f"     Formats: {', '.join(converter.get('supported_formats', []))}")
+            print(f"     Description: {converter.get('description', 'N/A')}")
+    else:
+        print(f"❌ FastMCP call failed: {result.get('error', 'Unknown error')}")
 
 
 def main():
@@ -382,13 +415,15 @@ def main():
         # Format discovery
         mcp_format_discovery(client)
         
-        print("\n🎉 MCP Integration Examples Completed!")
-        print("\nMCP Protocol Benefits:")
-        print("   • Standardized AI tool integration")
-        print("   • Type-safe tool definitions")
-        print("   • Automatic capability discovery")
-        print("   • Error handling and validation")
-        print("   • Perfect for AI agent workflows")
+        print("\n🎉 FastMCP Integration Examples Completed!")
+        print("\nFastMCP Protocol Benefits:")
+        print("   • Official MCP Python SDK integration")
+        print("   • Type-safe tool definitions with automatic validation")
+        print("   • Built-in capability discovery and introspection")
+        print("   • Comprehensive error handling and logging")
+        print("   • Perfect for AI agent workflows and automation")
+        print("   • Resources and prompts support for rich context")
+        print("   • Lifespan management for proper initialization")
         
     except KeyboardInterrupt:
         print("\n\n👋 Demo interrupted by user")

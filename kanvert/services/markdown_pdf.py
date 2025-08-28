@@ -10,8 +10,20 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 
 import markdown
-from weasyprint import HTML, CSS
-from weasyprint.text.fonts import FontConfiguration
+# Try to import WeasyPrint - make it optional
+try:
+    from weasyprint import HTML, CSS
+    from weasyprint.text.fonts import FontConfiguration
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
+    # Create placeholder classes for type hints
+    class HTML:
+        pass
+    class CSS:
+        pass
+    class FontConfiguration:
+        pass
 from bs4 import BeautifulSoup
 
 from ..core.base import (
@@ -43,6 +55,12 @@ class MarkdownToPdfConverter(BaseConverter):
     """
     
     def __init__(self):
+        if not WEASYPRINT_AVAILABLE:
+            raise ImportError(
+                "WeasyPrint is not available. Please install system dependencies: "
+                "brew install cairo pango gdk-pixbuf libffi"
+            )
+        
         super().__init__(
             name="markdown_to_pdf",
             supported_formats=[ConversionFormat.PDF]
