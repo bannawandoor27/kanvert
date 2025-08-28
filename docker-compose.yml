@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  kanvert:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kanvert-server
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=Kanvert
+      - ENVIRONMENT=production
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - TEMP_DIR=/app/temp
+      - MAX_CONTENT_SIZE=5242880
+      - MCP_ENABLED=true
+      - CORS_ORIGINS=["*"]
+    volumes:
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - kanvert-network
+
+  # Optional: Redis for caching and rate limiting (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: kanvert-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - kanvert-network
+
+  # Optional: Nginx reverse proxy (uncomment if needed)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: kanvert-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - kanvert
+  #   restart: unless-stopped
+  #   networks:
+  #     - kanvert-network
+
+networks:
+  kanvert-network:
+    driver: bridge
+
+volumes:
+  # redis_data:  # Uncomment if using Redis
+  logs:
+  temp:
