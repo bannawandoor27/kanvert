@@ -1,5 +1,6 @@
 export { Button, buttonVariants } from './Button';
 export { Input, inputVariants } from './Input';
+export { Badge } from './Badge';
 export { 
   Card, 
   CardHeader, 
