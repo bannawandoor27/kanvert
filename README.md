@@ -2,8 +2,7 @@
 
 A professional, modular MCP (Model Context Protocol) server built with FastAPI for document conversion services. Currently supports markdown to PDF conversion with an extensible architecture for additional conversion APIs.
 
-## Features
-
+## Featuresl
 - 🚀 **Professional Architecture**: Modular, extensible design following SOLID principles
 - 📄 **Markdown to PDF**: High-quality PDF generation from markdown with custom styling
 - 🔌 **MCP Protocol**: Full Model Context Protocol support using official FastMCP framework
