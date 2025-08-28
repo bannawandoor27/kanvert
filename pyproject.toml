@@ -43,10 +43,29 @@ dependencies = [
     "beautifulsoup4>=4.12.2",
     "lxml>=4.9.3",
     
+    # Office document processing
+    "python-docx>=1.1.0",
+    "openpyxl>=3.1.2",
+    "python-pptx>=0.6.23",
+    "pywin32>=306; sys_platform == 'win32'",
+    "comtypes>=1.2.0; sys_platform == 'win32'",
+    
+    # PDF and HTML processing
+    "pypdf>=3.17.0",
+    "pdfplumber>=0.10.0",
+    "selenium>=4.15.0",
+    "playwright>=1.40.0",
+    
+    # Document comparison and analysis
+    "python-Levenshtein>=0.25.0",
+    "fuzzywuzzy>=0.18.0",
+    "xmldiff>=2.6.3",
+    
     # File handling and utilities
     "python-multipart>=0.0.6",
     "aiofiles>=23.2.1",
     "Pillow>=10.1.0",
+    "python-magic>=0.4.27",
     
     # Logging and monitoring
     "structlog>=23.2.0",

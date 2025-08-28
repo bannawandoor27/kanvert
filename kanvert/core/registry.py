@@ -2,9 +2,12 @@
 Converter registry for managing and accessing different document converters.
 """
 
-from typing import Dict, List, Optional, Type
-from .base import BaseConverter, ConversionFormat, ConversionRequest, ConversionResult, ValidationError
+import asyncio
 import logging
+from typing import Dict, List, Optional, Type
+
+from .base import BaseConverter, ConversionFormat, ConversionRequest, ConversionResult, ValidationError
+from .config_manager import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +17,14 @@ class ConverterRegistry:
     Registry for managing document converters.
     
     This class provides a centralized way to register, discover, and access
-    different document conversion services.
+    different document conversion services with health monitoring and configuration.
     """
     
     def __init__(self):
         self._converters: Dict[str, BaseConverter] = {}
         self._format_mapping: Dict[str, List[str]] = {}
+        self._health_status: Dict[str, Dict] = {}
+        self._performance_metrics: Dict[str, Dict] = {}
     
     def register_converter(self, converter: BaseConverter) -> None:
         """
@@ -32,18 +37,75 @@ class ConverterRegistry:
             ValueError: If a converter with the same name is already registered
         """
         if converter.name in self._converters:
-            raise ValueError(f"Converter '{converter.name}' is already registered")
+            logger.warning(f"Converter '{converter.name}' is already registered, replacing")
+        
+        # Perform initial health check
+        health_status = self._check_converter_health(converter)
+        
+        if health_status["status"] == "unhealthy":
+            logger.error(
+                f"Cannot register unhealthy converter '{converter.name}': {health_status.get('error')}"
+            )
+            # Still register but mark as unhealthy
         
         self._converters[converter.name] = converter
+        self._health_status[converter.name] = health_status
         
         # Update format mapping
         for fmt in converter.supported_formats:
             format_key = fmt.value
             if format_key not in self._format_mapping:
                 self._format_mapping[format_key] = []
-            self._format_mapping[format_key].append(converter.name)
+            if converter.name not in self._format_mapping[format_key]:
+                self._format_mapping[format_key].append(converter.name)
         
-        logger.info(f"Registered converter: {converter.name}")
+        # Load converter-specific configuration
+        converter_config = config_manager.get_converter_config(converter.name)
+        if converter_config:
+            logger.info(f"Applied configuration for converter: {converter.name}")
+        
+        logger.info(f"Registered converter: {converter.name} (status: {health_status['status']})")
+    
+    def _check_converter_health(self, converter: BaseConverter) -> Dict[str, any]:
+        """Perform health check on a specific converter."""
+        try:
+            # Get converter's own health status
+            converter_health = converter.get_health_status()
+            
+            # Perform basic validation check
+            from .base import ConversionRequest, ConversionFormat
+            test_request = ConversionRequest(
+                content="# Test", 
+                output_format=converter.supported_formats[0] if converter.supported_formats else ConversionFormat.PDF
+            )
+            
+            # Test validation (don't actually convert)
+            can_validate = converter.validate_request(test_request)
+            
+            status = "healthy"
+            if not converter_health.get("is_initialized", False):
+                status = "unhealthy"
+            elif converter_health.get("errors"):
+                status = "degraded"
+            elif not can_validate:
+                status = "degraded"
+            
+            return {
+                "status": status,
+                "is_initialized": converter_health.get("is_initialized", False),
+                "supported_formats": [fmt.value for fmt in converter.supported_formats],
+                "errors": converter_health.get("errors", []),
+                "can_validate": can_validate,
+                "last_check": 0  # Will be updated with proper timestamp in production
+            }
+            
+        except Exception as e:
+            logger.error(f"Health check failed for converter '{converter.name}': {e}")
+            return {
+                "status": "unhealthy",
+                "error": str(e),
+                "last_check": 0
+            }
     
     def unregister_converter(self, name: str) -> None:
         """
@@ -172,24 +234,39 @@ class ConverterRegistry:
         """
         total_converters = len(self._converters)
         healthy_converters = 0
+        degraded_converters = 0
         
         converter_status = {}
         for name, converter in self._converters.items():
-            try:
-                # Basic health check - could be expanded per converter
-                status = "healthy"
-                healthy_converters += 1
-            except Exception as e:
-                status = f"unhealthy: {str(e)}"
+            # Update health status
+            health_status = self._check_converter_health(converter)
+            self._health_status[name] = health_status
             
-            converter_status[name] = status
+            converter_status[name] = health_status
+            
+            if health_status["status"] == "healthy":
+                healthy_converters += 1
+            elif health_status["status"] == "degraded":
+                degraded_converters += 1
+        
+        overall_status = "healthy"
+        if healthy_converters == 0:
+            overall_status = "unhealthy"
+        elif degraded_converters > 0:
+            overall_status = "degraded"
+        
+        # Include configuration status
+        config_health = config_manager.get_health_status()
         
         return {
             "total_converters": total_converters,
             "healthy_converters": healthy_converters,
-            "status": "healthy" if healthy_converters == total_converters else "degraded",
+            "degraded_converters": degraded_converters,
+            "unhealthy_converters": total_converters - healthy_converters - degraded_converters,
+            "status": overall_status,
             "converters": converter_status,
-            "supported_formats": self.get_supported_formats()
+            "supported_formats": self.get_supported_formats(),
+            "configuration": config_health
         }
 
 

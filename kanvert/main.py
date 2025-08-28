@@ -2,34 +2,20 @@
 Main FastAPI application for the Kanvert document conversion server.
 """
 
+import logging
+import structlog
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
-from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.openapi.utils import get_openapi
-import logging
-import structlog
 
-from .config.settings import get_settings
-from .api.routes import router as conversion_router
 from .api.middleware import setup_middleware
-from .mcp.routes import router as mcp_router
+from .api.routes import router as conversion_router
+from .config.settings import get_settings
+from .core.container import configure_services, get_container
+from .core.factory import converter_factory
 from .core.registry import converter_registry
+from .mcp.routes import router as mcp_router
 from .utils.logging_config import setup_logging
-
-# Try to import WeasyPrint-dependent services
-try:
-    from .services.markdown_pdf import MarkdownToPdfConverter
-    WEASYPRINT_AVAILABLE = True
-except ImportError as e:
-    WEASYPRINT_AVAILABLE = False
-    import warnings
-    warnings.warn(
-        f"WeasyPrint dependencies not available: {e}. "
-        "PDF conversion will be disabled. Install system dependencies: "
-        "brew install cairo pango gdk-pixbuf libffi",
-        ImportWarning
-    )
 
 
 @asynccontextmanager
@@ -45,19 +31,29 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Kanvert application", version=settings.app_version)
     
     try:
-        # Register converters if available
-        if WEASYPRINT_AVAILABLE:
-            markdown_converter = MarkdownToPdfConverter()
-            converter_registry.register_converter(markdown_converter)
-            logger.info("Markdown to PDF converter registered")
-        else:
-            logger.warning("PDF conversion disabled - WeasyPrint dependencies missing")
+        # Configure dependency injection container
+        container = get_container()
+        configure_services(container)
+        
+        # Discover and register converter plugins
+        converter_factory.discover_plugins()
+        available_plugins = converter_factory.get_available_plugins()
+        logger.info(f"Discovered {len(available_plugins)} available converter plugins", plugins=available_plugins)
+        
+        # Create and register all available converters
+        converters = converter_factory.create_all_available_converters()
+        for name, converter in converters.items():
+            converter_registry.register_converter(converter)
+            logger.info(f"Registered converter: {name}")
+        
+        if not converters:
+            logger.warning("No converters available - check dependencies")
         
         # Create temp directory if needed
         import os
         os.makedirs(settings.temp_dir, exist_ok=True)
         
-        logger.info("Application startup completed")
+        logger.info("Application startup completed", registered_converters=len(converters))
         
         yield
         

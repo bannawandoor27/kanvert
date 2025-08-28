@@ -6,7 +6,7 @@ import asyncio
 import io
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from pathlib import Path
 
 import markdown
@@ -55,16 +55,18 @@ class MarkdownToPdfConverter(BaseConverter):
     """
     
     def __init__(self):
+        super().__init__(
+            name="markdown_to_pdf",
+            supported_formats=[ConversionFormat.PDF]
+        )
+    
+    def _perform_initialization(self) -> None:
+        """Initialize markdown converter with required dependencies."""
         if not WEASYPRINT_AVAILABLE:
             raise ImportError(
                 "WeasyPrint is not available. Please install system dependencies: "
                 "brew install cairo pango gdk-pixbuf libffi"
             )
-        
-        super().__init__(
-            name="markdown_to_pdf",
-            supported_formats=[ConversionFormat.PDF]
-        )
         
         # Initialize markdown parser with extensions
         self.md = markdown.Markdown(extensions=[
@@ -103,7 +105,7 @@ class MarkdownToPdfConverter(BaseConverter):
         Returns:
             ConversionResult with PDF data
         """
-        job_id = f"md2pdf_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{id(request)}"
+        job_id = self._generate_job_id("md2pdf")
         
         try:
             logger.info(f"Starting markdown to PDF conversion: {job_id}")
@@ -121,33 +123,21 @@ class MarkdownToPdfConverter(BaseConverter):
             # Generate PDF from HTML
             pdf_data = await self._html_to_pdf(html_content, options)
             
-            # Create result
-            result = ConversionResult(
+            # Create successful result
+            return self._create_result_success(
                 job_id=job_id,
-                status=ConversionStatus.COMPLETED,
                 output_data=pdf_data,
-                output_filename=f"{job_id}.pdf",
+                filename=f"{job_id}.pdf",
                 metadata={
                     "original_size": len(request.content),
                     "pdf_size": len(pdf_data),
                     "options_used": options
-                },
-                created_at=datetime.utcnow(),
-                completed_at=datetime.utcnow()
+                }
             )
-            
-            logger.info(f"Conversion completed successfully: {job_id}")
-            return result
             
         except Exception as e:
             logger.error(f"Conversion failed: {job_id} - {str(e)}")
-            return ConversionResult(
-                job_id=job_id,
-                status=ConversionStatus.FAILED,
-                error_message=str(e),
-                created_at=datetime.utcnow(),
-                completed_at=datetime.utcnow()
-            )
+            return self._create_result_failure(job_id, str(e))
     
     async def _markdown_to_html(self, markdown_content: str, options: Dict[str, Any]) -> str:
         """Convert markdown content to HTML."""
@@ -183,9 +173,7 @@ class MarkdownToPdfConverter(BaseConverter):
         """Convert HTML content to PDF using WeasyPrint."""
         try:
             # Run WeasyPrint in a thread to avoid blocking
-            loop = asyncio.get_event_loop()
-            pdf_data = await loop.run_in_executor(
-                None, 
+            pdf_data = await self._run_in_executor(
                 self._generate_pdf, 
                 html_content, 
                 options
