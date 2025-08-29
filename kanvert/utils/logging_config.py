@@ -22,21 +22,34 @@ def setup_logging(settings: Settings) -> None:
         settings: Application settings containing logging configuration
     """
     
-    # Configure standard library logging
+    # Configure standard library logging first
     logging_config = _get_logging_config(settings)
     logging.config.dictConfig(logging_config)
     
-    # Configure structlog
-    structlog.configure(
-        processors=[
+    # Configure structlog processors based on environment
+    if settings.is_development():
+        # Development: clean console output
+        processors = [
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+            structlog.dev.set_exc_info,
+            structlog.dev.ConsoleRenderer(colors=True)
+        ]
+    else:
+        # Production: JSON output
+        processors = [
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
-            structlog.processors.JSONRenderer() if settings.log_format == "json" 
-            else structlog.dev.ConsoleRenderer(colors=True)
-        ],
+            structlog.processors.JSONRenderer()
+        ]
+    
+    # Configure structlog
+    structlog.configure(
+        processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, settings.log_level.value)
         ),
@@ -64,21 +77,42 @@ def _get_logging_config(settings: Settings) -> Dict[str, Any]:
         "detailed": {
             "format": "%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(funcName)s:%(lineno)d - %(message)s",
         },
+        "simple": {
+            "format": "%(levelname)s - %(name)s - %(message)s",
+        },
         "json": {
             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
             "format": "%(asctime)s %(name)s %(levelname)s %(module)s %(funcName)s %(lineno)d %(message)s"
         }
     }
     
+    # Determine formatter based on environment and log format
+    if settings.is_development():
+        # In development, always use readable text format for console
+        console_formatter = "simple"
+    else:
+        # In production, use specified format
+        console_formatter = "json" if settings.log_format == "json" else "default"
+    
     # Base handlers
     handlers = {
         "console": {
             "class": "rich.logging.RichHandler" if settings.is_development() else "logging.StreamHandler",
             "level": settings.log_level.value,
-            "formatter": "default" if settings.log_format == "text" else "json",
-            "stream": sys.stdout
+            "formatter": console_formatter,
         }
     }
+    
+    # Configure RichHandler specific settings
+    if settings.is_development():
+        handlers["console"].update({
+            "rich_tracebacks": True,
+            "show_time": True,
+            "show_level": True,
+            "show_path": True,
+        })
+    else:
+        handlers["console"]["stream"] = sys.stdout
     
     # Add file handler if log file is specified
     if settings.log_file:
@@ -99,22 +133,34 @@ def _get_logging_config(settings: Settings) -> Dict[str, Any]:
     loggers = {
         "kanvert": {
             "level": settings.log_level.value,
-            "handlers": list(handlers.keys()),
+            "handlers": ["console"] if not settings.log_file else ["console", "file"],
             "propagate": False
         },
+        # Reduce verbosity of third-party libraries
         "uvicorn": {
-            "level": "INFO" if settings.log_level == LogLevel.DEBUG else "WARNING",
+            "level": "WARNING",
             "handlers": ["console"],
             "propagate": False
         },
         "uvicorn.access": {
-            "level": "INFO" if settings.is_development() else "WARNING",
+            "level": "WARNING",
             "handlers": ["console"],
             "propagate": False
         },
         "fastapi": {
-            "level": settings.log_level.value,
-            "handlers": list(handlers.keys()),
+            "level": "WARNING",
+            "handlers": ["console"],
+            "propagate": False
+        },
+        # Suppress other noisy loggers
+        "asyncio": {
+            "level": "WARNING",
+            "handlers": ["console"],
+            "propagate": False
+        },
+        "urllib3": {
+            "level": "WARNING",
+            "handlers": ["console"],
             "propagate": False
         }
     }
@@ -126,8 +172,8 @@ def _get_logging_config(settings: Settings) -> Dict[str, Any]:
         "handlers": handlers,
         "loggers": loggers,
         "root": {
-            "level": settings.log_level.value,
-            "handlers": list(handlers.keys())
+            "level": "WARNING",  # Suppress root logger noise
+            "handlers": ["console"] if not settings.log_file else ["console", "file"]
         }
     }
 
@@ -143,6 +189,21 @@ def get_logger(name: str) -> structlog.BoundLogger:
         Configured structlog logger
     """
     return structlog.get_logger(name)
+
+
+def get_module_logger(module_name: str) -> structlog.BoundLogger:
+    """
+    Get a logger for a specific module using structlog.
+    
+    This is the preferred way to get loggers in the application.
+    
+    Args:
+        module_name: Usually __name__ from the calling module
+        
+    Returns:
+        Configured structlog logger
+    """
+    return structlog.get_logger(module_name)
 
 
 class LoggerMixin:

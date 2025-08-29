@@ -3,13 +3,13 @@ Converter registry for managing and accessing different document converters.
 """
 
 import asyncio
-import logging
+import structlog
 from typing import Dict, List, Optional, Type
 
 from .base import BaseConverter, ConversionFormat, ConversionRequest, ConversionResult, ValidationError
 from .config_manager import config_manager
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ConverterRegistry:

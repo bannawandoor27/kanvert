@@ -10,6 +10,11 @@ from fastapi.responses import JSONResponse
 
 from .api.middleware import setup_middleware
 from .api.routes import router as conversion_router
+from .api.auth import router as auth_router
+from .api.dashboard import router as dashboard_router
+from .api.advanced import router as advanced_router
+from .api.settings import router as settings_router
+from .api.history import router as history_router
 from .config.settings import get_settings
 from .core.container import configure_services, get_container
 from .core.factory import converter_factory
@@ -83,7 +88,12 @@ def create_app() -> FastAPI:
     setup_middleware(app, settings)
     
     # Include routers
+    app.include_router(auth_router, prefix=settings.api_prefix)
     app.include_router(conversion_router, prefix=settings.api_prefix)
+    app.include_router(dashboard_router, prefix=settings.api_prefix)
+    app.include_router(advanced_router, prefix=settings.api_prefix)
+    app.include_router(settings_router, prefix=settings.api_prefix)
+    app.include_router(history_router, prefix=settings.api_prefix)
     app.include_router(mcp_router, prefix=settings.api_prefix)
     
     # Health check endpoint

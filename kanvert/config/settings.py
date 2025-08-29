@@ -48,8 +48,27 @@ class Settings(BaseSettings):
     
     # Security settings
     secret_key: str = Field(default="your-secret-key-change-in-production", description="Secret key for signing")
+    SECRET_KEY: str = Field(default="your-secret-key-change-in-production", description="JWT secret key")
+    ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="Access token expiration in minutes")
     api_key: Optional[str] = Field(default=None, description="API key for authentication")
     rate_limit_requests: int = Field(default=100, description="Rate limit requests per minute")
+    
+    # Database settings (SQLite)
+    DATABASE_PATH: Optional[str] = Field(default=None, description="SQLite database file path")
+    DATABASE_URL: str = Field(default="sqlite:///data/kanvert.db", description="Database connection URL")
+    
+    # Email settings
+    EMAIL_BACKEND: str = Field(default="console", description="Email backend: smtp or console")
+    EMAIL_FROM: str = Field(default="noreply@kanvert.com", description="From email address")
+    SMTP_HOST: Optional[str] = Field(default=None, description="SMTP host")
+    SMTP_PORT: int = Field(default=587, description="SMTP port")
+    SMTP_USER: Optional[str] = Field(default=None, description="SMTP username")
+    SMTP_PASSWORD: Optional[str] = Field(default=None, description="SMTP password")
+    SMTP_TLS: bool = Field(default=True, description="Use TLS for SMTP")
+    
+    # Frontend settings
+    FRONTEND_URL: str = Field(default="http://localhost:5173", description="Frontend application URL")
     
     # Logging settings
     log_level: LogLevel = Field(default=LogLevel.INFO, description="Logging level")

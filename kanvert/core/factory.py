@@ -4,7 +4,7 @@ Converter factory pattern for dynamic converter creation and registration.
 
 import importlib
 import importlib.util
-import logging
+import structlog
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Type, Any
 from pathlib import Path
@@ -12,7 +12,7 @@ from pathlib import Path
 from .base import BaseConverter, ConversionFormat
 from ..config.settings import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ConverterPlugin(ABC):

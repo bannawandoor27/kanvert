@@ -5,6 +5,15 @@ export const API_TIMEOUT = 30000; // 30 seconds
 
 // API Endpoints
 export const API_ENDPOINTS = {
+  // Authentication endpoints
+  AUTH_REGISTER: `${API_PREFIX}/auth/register`,
+  AUTH_LOGIN: `${API_PREFIX}/auth/login`,
+  AUTH_PASSWORD_RESET: `${API_PREFIX}/auth/password-reset`,
+  AUTH_PASSWORD_RESET_CONFIRM: `${API_PREFIX}/auth/password-reset/confirm`,
+  AUTH_ME: `${API_PREFIX}/auth/me`,
+  AUTH_VALIDATE_TOKEN: `${API_PREFIX}/auth/validate-token`,
+  AUTH_REFRESH_API_KEY: `${API_PREFIX}/auth/refresh-api-key`,
+
   // Conversion endpoints
   CONVERT_MARKDOWN_TO_PDF: `${API_PREFIX}/convert/markdown-to-pdf`,
   CONVERT_HTML_TO_PDF: `${API_PREFIX}/convert/html-to-pdf`,
@@ -14,6 +23,38 @@ export const API_ENDPOINTS = {
   
   // Comparison endpoints
   COMPARE_DOCX: `${API_PREFIX}/convert/docx-compare`,
+  
+  // Dashboard endpoints
+  DASHBOARD_SUMMARY: `${API_PREFIX}/dashboard/summary`,
+  DASHBOARD_ANALYTICS: `${API_PREFIX}/dashboard/analytics`,
+  DASHBOARD_SYSTEM_STATUS: `${API_PREFIX}/dashboard/system-status`,
+
+  // Advanced endpoints
+  BATCH_JOBS: `${API_PREFIX}/advanced/batch-jobs`,
+  BATCH_JOB_FILES: (jobId: string) => `${API_PREFIX}/advanced/batch-jobs/${jobId}/files`,
+  BATCH_JOB_START: (jobId: string) => `${API_PREFIX}/advanced/batch-jobs/${jobId}/start`,
+  BATCH_JOB_PAUSE: (jobId: string) => `${API_PREFIX}/advanced/batch-jobs/${jobId}/pause`,
+  BATCH_JOB_CANCEL: (jobId: string) => `${API_PREFIX}/advanced/batch-jobs/${jobId}/cancel`,
+  CONVERSION_TEMPLATES: `${API_PREFIX}/advanced/templates`,
+  SCHEDULED_JOBS: `${API_PREFIX}/advanced/scheduled-jobs`,
+
+  // Settings endpoints
+  SETTINGS_PROFILE: `${API_PREFIX}/settings/profile`,
+  SETTINGS_NOTIFICATIONS: `${API_PREFIX}/settings/notifications`,
+  SETTINGS_CONVERSION_DEFAULTS: `${API_PREFIX}/settings/conversion-defaults`,
+  SETTINGS_PASSWORD_CHANGE: `${API_PREFIX}/settings/password-change`,
+  SETTINGS_API_KEYS: `${API_PREFIX}/settings/api-keys`,
+  SETTINGS_API_KEY_REVOKE: (keyId: string) => `${API_PREFIX}/settings/api-keys/${keyId}`,
+  SETTINGS_USAGE_STATS: `${API_PREFIX}/settings/usage-stats`,
+  SETTINGS_ALL: `${API_PREFIX}/settings/`,
+
+  // History endpoints
+  HISTORY: `${API_PREFIX}/history/`,
+  HISTORY_ITEM: (conversionId: string) => `${API_PREFIX}/history/${conversionId}`,
+  HISTORY_BULK_ACTION: `${API_PREFIX}/history/bulk-action`,
+  HISTORY_STATS_SUMMARY: `${API_PREFIX}/history/stats/summary`,
+  HISTORY_STATS_DAILY: `${API_PREFIX}/history/stats/daily`,
+  HISTORY_EXPORT: `${API_PREFIX}/history/export`,
   
   // System endpoints
   HEALTH: '/health',

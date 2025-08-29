@@ -10,6 +10,12 @@ import { apiRequest, apiClient } from '../utils';
 import { API_ENDPOINTS } from '../constants';
 import { useNotificationStore, useConversionStore } from '../stores';
 
+// Export all specialized hooks
+export * from './useDashboard';
+export * from './useSettings';
+export * from './useHistory';
+export * from './useAdvanced';
+
 // Query keys
 export const queryKeys = {
   health: ['health'],

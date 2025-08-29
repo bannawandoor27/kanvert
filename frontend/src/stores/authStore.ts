@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { User, SubscriptionTier } from '../types';
 import { STORAGE_KEYS } from '../constants';
 import { storage } from '../utils';
+import { api } from '../services/api';
 
 interface AuthState {
   user: User | null;
@@ -17,6 +18,9 @@ interface AuthState {
   updateUser: (updates: Partial<User>) => void;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
+  requestPasswordReset: (email: string) => Promise<boolean>;
+  confirmPasswordReset: (email: string, token: string, newPassword: string) => Promise<boolean>;
+  refreshUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -31,34 +35,42 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call - replace with actual authentication
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const response = await api.auth.login({ email, password, remember_me: false });
           
-          // Mock user data - replace with actual API response
-          const mockUser: User = {
-            id: '1',
-            email,
-            name: email.split('@')[0],
-            subscription: SubscriptionTier.FREE,
-            api_key: 'sk-' + Math.random().toString(36).substr(2, 32),
-            created_at: new Date().toISOString(),
-            last_login: new Date().toISOString(),
-          };
+          if (response.error) {
+            set({ error: response.error, isLoading: false });
+            return false;
+          }
           
-          // Store auth token
-          storage.set(STORAGE_KEYS.AUTH_TOKEN, 'mock-jwt-token');
-          storage.set(STORAGE_KEYS.API_KEY, mockUser.api_key);
+          if (response.data) {
+            // Store auth token
+            storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.access_token);
+            storage.set(STORAGE_KEYS.API_KEY, response.data.user.api_key);
+            
+            // Create user object with proper typing
+            const user: User = {
+              id: response.data.user.id,
+              email: response.data.user.email,
+              name: response.data.user.name,
+              subscription: response.data.user.subscription || SubscriptionTier.FREE,
+              api_key: response.data.user.api_key,
+              created_at: response.data.user.created_at || new Date().toISOString(),
+              last_login: new Date().toISOString(),
+            };
+            
+            set({ 
+              user, 
+              isAuthenticated: true, 
+              isLoading: false 
+            });
+            
+            return true;
+          }
           
-          set({ 
-            user: mockUser, 
-            isAuthenticated: true, 
-            isLoading: false 
-          });
-          
-          return true;
+          return false;
         } catch (error) {
           set({ 
-            error: 'Invalid email or password', 
+            error: 'Login failed. Please try again.', 
             isLoading: false 
           });
           return false;
@@ -69,30 +81,49 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          // Simulate API call - replace with actual registration
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const [firstName, ...lastNameParts] = name.split(' ');
+          const lastName = lastNameParts.join(' ') || '';
           
-          // Mock user data - replace with actual API response
-          const mockUser: User = {
-            id: Math.random().toString(36).substr(2, 9),
+          const response = await api.auth.register({
+            first_name: firstName,
+            last_name: lastName,
             email,
-            name,
-            subscription: SubscriptionTier.FREE,
-            api_key: 'sk-' + Math.random().toString(36).substr(2, 32),
-            created_at: new Date().toISOString(),
-          };
-          
-          // Store auth token
-          storage.set(STORAGE_KEYS.AUTH_TOKEN, 'mock-jwt-token');
-          storage.set(STORAGE_KEYS.API_KEY, mockUser.api_key);
-          
-          set({ 
-            user: mockUser, 
-            isAuthenticated: true, 
-            isLoading: false 
+            password,
+            terms_accepted: true,
+            newsletter_subscription: false,
           });
           
-          return true;
+          if (response.error) {
+            set({ error: response.error, isLoading: false });
+            return false;
+          }
+          
+          if (response.data) {
+            // Store auth token
+            storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.access_token);
+            storage.set(STORAGE_KEYS.API_KEY, response.data.user.api_key);
+            
+            // Create user object with proper typing
+            const user: User = {
+              id: response.data.user.id,
+              email: response.data.user.email,
+              name: response.data.user.name,
+              subscription: response.data.user.subscription || SubscriptionTier.FREE,
+              api_key: response.data.user.api_key,
+              created_at: response.data.user.created_at || new Date().toISOString(),
+              last_login: new Date().toISOString(),
+            };
+            
+            set({ 
+              user, 
+              isAuthenticated: true, 
+              isLoading: false 
+            });
+            
+            return true;
+          }
+          
+          return false;
         } catch (error) {
           set({ 
             error: 'Registration failed. Please try again.', 
@@ -125,6 +156,83 @@ export const useAuthStore = create<AuthState>()(
       clearError: () => set({ error: null }),
       
       setLoading: (loading: boolean) => set({ isLoading: loading }),
+      
+      requestPasswordReset: async (email: string) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          const response = await api.auth.requestPasswordReset({ email });
+          
+          if (response.error) {
+            set({ error: response.error, isLoading: false });
+            return false;
+          }
+          
+          set({ isLoading: false });
+          return true;
+        } catch (error) {
+          set({ 
+            error: 'Failed to send password reset email', 
+            isLoading: false 
+          });
+          return false;
+        }
+      },
+      
+      confirmPasswordReset: async (email: string, token: string, newPassword: string) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          const response = await api.auth.confirmPasswordReset({
+            email,
+            token,
+            new_password: newPassword,
+          });
+          
+          if (response.error) {
+            set({ error: response.error, isLoading: false });
+            return false;
+          }
+          
+          set({ isLoading: false });
+          return true;
+        } catch (error) {
+          set({ 
+            error: 'Failed to reset password', 
+            isLoading: false 
+          });
+          return false;
+        }
+      },
+      
+      refreshUser: async () => {
+        const token = storage.get(STORAGE_KEYS.AUTH_TOKEN);
+        if (!token) return;
+        
+        try {
+          const response = await api.auth.getCurrentUser();
+          
+          if (response.data && !response.error) {
+            const user: User = {
+              id: response.data._id || response.data.id,
+              email: response.data.email,
+              name: response.data.name,
+              subscription: response.data.subscription || SubscriptionTier.FREE,
+              api_key: response.data.api_key,
+              created_at: response.data.created_at,
+              last_login: response.data.last_login,
+            };
+            
+            set({ user, isAuthenticated: true });
+          }
+        } catch (error) {
+          // If token is invalid, clear auth state
+          storage.remove(STORAGE_KEYS.AUTH_TOKEN);
+          storage.remove(STORAGE_KEYS.API_KEY);
+          storage.remove(STORAGE_KEYS.USER);
+          set({ user: null, isAuthenticated: false });
+        }
+      },
     }),
     {
       name: STORAGE_KEYS.USER,

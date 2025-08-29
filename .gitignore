@@ -68,3 +68,5 @@ logs/
 *.temp
 .temp/
 .tmp/
+
+/data/

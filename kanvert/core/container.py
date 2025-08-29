@@ -2,11 +2,11 @@
 Dependency injection container for modular service management.
 """
 
-import logging
+import structlog
 from typing import Any, Callable, Dict, Optional, TypeVar, Type, Union
 from functools import wraps
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 T = TypeVar('T')
 
